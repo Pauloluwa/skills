@@ -1,5 +1,7 @@
 # skills
 
+[![skills.sh](https://skills.sh/b/Pauloluwa/skills)](https://skills.sh/Pauloluwa/skills)
+
 A collection of agent skills, installable into any agent (Cursor, Claude Code, Codex, and more) with the open [`skills`](https://www.skills.sh/) CLI.
 
 ## Install
