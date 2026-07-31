@@ -26,7 +26,7 @@ Scan targets:
 1. Root config: `package.json` (deps + scripts), `tsconfig.json` / `jsconfig.json` (paths), workspace files (`pnpm-workspace.yaml`, turbo/nx).
 2. Source layout: top-level source folders, route folder(s), `modules/` (or equivalent), test folders.
 3. Conventions: file suffixes (`*.service.*`, `*.hook.*`, `*.store.*`, `*.slice.*`, `*.types.*`, `*.api.*`), import alias.
-4. Tools: framework/router, state library, data-fetching library, i18n, test runner, lint/format.
+4. Tools: framework/router, state library, data-fetching library, styling system (Chakra, Panda, Tailwind, styled-components, CSS modules), i18n, test runner, lint/format.
 5. Language: TypeScript vs JavaScript (drives `.ts/.tsx` vs `.js/.jsx` and whether `*.types` files apply).
 
 Output a short **discovery summary** before scaffolding:
@@ -52,6 +52,7 @@ Map these conceptual layers to the project's real paths; do not force folder nam
 | `hooks/utility/` | Domain-agnostic reusable hooks; export `use<Thing>` |
 | `config/` | Runtime wiring: HTTP/client instances, query client, cookies, env-driven setup, SDK bootstraps |
 | `constants/` | Static, environment-independent values: keys, enums, route paths, defaults, durations |
+| `themes/` | Styling-system configuration: tokens, semantic tokens, recipes, slot recipes, global CSS |
 | utils | Pure, domain-agnostic helpers |
 | tests | Follow the project's runner and placement |
 
@@ -139,6 +140,16 @@ Data fetching, in `<domain>.hook.*`:
 | RTK Query | endpoints injected into the domain's API; hooks re-exported from the domain |
 | None | thin hooks wrapping the service + local state |
 
+Styling, in `themes/`:
+
+| Detected tool | Subfolders that apply |
+|---------------|-----------------------|
+| Chakra v3 / Panda CSS (recipe-based) | all: `tokens/`, `semantic-tokens/`, `recipes/`, `slot-recipes/`, `global-css`, `index` assembling the system |
+| Tailwind | `tokens/` (+ `semantic-tokens/` if the project maps roles); token files imported into the Tailwind config / `@theme`; no `recipes/` or `slot-recipes/` |
+| styled-components / Emotion / vanilla-extract | `tokens/` + `index` exporting the theme object; no recipe folders |
+| CSS modules / plain CSS | `tokens/` (CSS custom properties or exported values) + `global-css`; no recipe folders |
+| None detected | do not create `themes/`; ask before introducing a styling system |
+
 i18n / routing:
 
 - i18n: follow the existing setup. If none exists, skip i18n files unless the user requests multilingual.
@@ -151,6 +162,27 @@ i18n / routing:
 - Rule of thumb: instantiates or depends on the environment at runtime -> `config/`; fixed value known ahead of time -> `constants/`.
 - Match the repo's existing naming: `config/<name>.{ts|js}` (e.g. `http-client.ts`), `constants/<name>.const.{ts|js}` (e.g. `route-path.const.ts`).
 - Create either folder only when the project needs it (minimal-delta).
+
+### Themes
+
+All styling-system configuration lives in `themes/` — never in `config/`, `constants/`, or component folders. The folder structure is uniform across styling tools; the detected tool decides which subfolders apply and what the files contain.
+
+```text
+themes/
+├── tokens/            # raw design tokens: colors, fonts, animations, keyframes
+├── semantic-tokens/   # role-based tokens mapped to raw tokens (e.g. bg.primary -> colors.blue.500)
+├── recipes/           # single-part component styles, one file per component (button.ts, badge.ts)
+├── slot-recipes/      # multi-part component styles, one file per component (dialog.ts, card.ts)
+├── global-css.ts      # global styles
+└── index.ts           # assembles + exports the theme/system (e.g. Chakra createSystem)
+```
+
+Rules:
+
+- `themes/index.ts` builds and exports the theme/system instance; `config/` or the provider layer only wires it into the app.
+- One file per component in `recipes/` and `slot-recipes/`; each subfolder exposes a barrel `index.ts`.
+- `themes/` exists whenever the project has styling configuration, regardless of tool — but create only the subfolders the detected tool supports (see the styling row in section 4). Never scaffold recipe folders for a tool that has no recipe concept.
+- Design tokens go in `themes/tokens/`, not `constants/` — they configure the styling system, even though they are static values.
 
 ## 5. Naming and placement
 
@@ -205,9 +237,10 @@ Ask when the repo is new/nearly empty, patterns conflict, a whole-project refact
 2. Which state approach for domain stores (Zustand, RTK, MobX, atomic, none)?
 3. Which data-fetching approach (React Query, RTK Query, SWR, none)?
 4. TypeScript or JavaScript?
-5. i18n now? If yes, which library and which locales?
-6. Which test runner, and centralized vs colocated tests?
-7. Confirm the domain convention: `modules/<domain>/<domain>.{service,hook,store,types}.*`?
+5. Which styling system (Chakra, Panda, Tailwind, styled-components, CSS modules, none)?
+6. i18n now? If yes, which library and which locales?
+7. Which test runner, and centralized vs colocated tests?
+8. Confirm the domain convention: `modules/<domain>/<domain>.{service,hook,store,types}.*`?
 
 **Whole-project refactor:**
 
@@ -227,6 +260,7 @@ Full question sets and a migration example: [reference.md](reference.md#clarific
 
 - All domain logic lives in `modules/<domain>/` — never a separate state/stores/features layer.
 - The state/data tool changes file contents, not file location.
+- All styling configuration lives in `themes/`; create only the subfolders the detected styling tool supports.
 - Consolidated hooks only compose existing module hooks; they must not redefine domain logic.
 - Consolidated hooks are single-domain; if a cross-domain composite seems warranted, ask the user before creating one.
 - Never assume a framework or tool the scan did not confirm.

@@ -10,7 +10,7 @@ Run before any scaffolding.
 
 | Scan | Look for |
 |------|----------|
-| `package.json` | dependencies (framework, state, data, i18n, test, lint), scripts |
+| `package.json` | dependencies (framework, state, data, styling, i18n, test, lint), scripts |
 | `tsconfig.json` / `jsconfig.json` | `compilerOptions.paths` (source alias), JS vs TS |
 | Workspace files | `pnpm-workspace.yaml`, turbo/nx config (monorepo?) |
 | Source folders | route folder, `modules/` or equivalent, test folders |
@@ -42,6 +42,7 @@ Match whatever the repo already uses. Do not introduce TypeScript into a JS proj
 | hooks (utility) | Domain-agnostic reusable hooks | `hooks/utility/` |
 | config | Runtime wiring: instances, env-driven setup, SDK bootstraps | `config/` |
 | constants | Static, environment-independent values | `constants/` |
+| themes | Styling-system configuration: tokens, recipes, global CSS | `themes/` |
 | utils | Pure, domain-agnostic helpers | `utils/` or `lib/` |
 | tests | Automated tests | project's runner + placement |
 
@@ -183,6 +184,97 @@ export type TFeatureFlag = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];
 | Pure data with no runtime behavior? | `constants/` |
 
 Create either folder only when the project needs it; match the repo's existing suffix (`*.const.*` vs plain).
+
+Styling values are the exception: design tokens (colors, fonts, durations used by the styling system) belong in `themes/tokens/`, not `constants/`.
+
+---
+
+## Themes
+
+All styling-system configuration lives in `themes/`. The structure is uniform; the detected styling tool decides which subfolders apply and what the files contain.
+
+```text
+themes/
+├── tokens/
+│   ├── colors.ts
+│   ├── fonts.ts
+│   ├── animations.ts
+│   └── keyframes.ts
+├── semantic-tokens/
+│   ├── colors.ts
+│   └── index.ts
+├── recipes/           # single-part components: button.ts, badge.ts, input.ts, index.ts
+├── slot-recipes/      # multi-part components: dialog.ts, card.ts, alert.ts, index.ts
+├── global-css.ts
+└── index.ts           # assembles + exports the theme/system
+```
+
+| Subfolder / file | Holds |
+|------------------|-------|
+| `tokens/` | Raw design tokens: color scales, font stacks, animation values, keyframes |
+| `semantic-tokens/` | Role-based tokens mapped to raw tokens (`bg.primary` -> `colors.blue.500`) |
+| `recipes/` | Style recipes for single-part components, one file per component |
+| `slot-recipes/` | Style recipes for multi-part components, one file per component |
+| `global-css.ts` | Global styles / resets |
+| `index.ts` | Theme/system assembly and export (e.g. Chakra `createSystem`, theme object) |
+
+### Tool mapping — same location, tool decides which subfolders exist
+
+| Detected tool | What `themes/` contains |
+|---------------|-------------------------|
+| Chakra v3 / Panda CSS | All subfolders. `index.ts` calls `createSystem`/`defineConfig` with tokens, semantic tokens, recipes, slot recipes, global CSS |
+| Tailwind | `tokens/` (+ `semantic-tokens/` if roles are mapped); token files imported into `tailwind.config.*` or `@theme`; no recipe folders |
+| styled-components / Emotion / vanilla-extract | `tokens/`; `index.ts` exports the theme object consumed by the provider |
+| CSS modules / plain CSS | `tokens/` as CSS custom properties or exported values; `global-css` |
+| None detected | Do not create `themes/`; ask before introducing a styling system |
+
+Never scaffold `recipes/` or `slot-recipes/` for a tool with no recipe concept.
+
+### Example (Chakra v3)
+
+```typescript
+// themes/recipes/button.ts — single-part recipe
+import { defineRecipe } from "@chakra-ui/react";
+
+export const buttonRecipe = defineRecipe({
+  base: { fontWeight: "medium", borderRadius: "md" },
+  variants: {
+    visual: {
+      solid: { bg: "bg.primary", color: "fg.inverted" },
+      outline: { borderWidth: "1px", borderColor: "border.primary" },
+    },
+  },
+});
+```
+
+```typescript
+// themes/index.ts — assembly stays here; config/ or the provider only wires it in
+import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
+import { colors, fonts, animations, keyframes } from "./tokens";
+import { semanticTokens } from "./semantic-tokens";
+import { recipes } from "./recipes";
+import { slotRecipes } from "./slot-recipes";
+import { globalCss } from "./global-css";
+
+const config = defineConfig({
+  globalCss,
+  theme: {
+    tokens: { colors, fonts, animations, keyframes },
+    semanticTokens,
+    recipes,
+    slotRecipes,
+  },
+});
+
+export const system = createSystem(defaultConfig, config);
+```
+
+Rules:
+
+- `themes/index.ts` builds and exports the system; app wiring (provider setup) lives in `config/` or the framework's provider location.
+- One file per component recipe; each subfolder exposes a barrel `index.ts`.
+- New component styles go in `recipes/` or `slot-recipes/` (recipe-based tools), not inline in component files, when the repo styles via the theme.
+- Match the repo's existing file naming inside `themes/` if it already has one.
 
 ---
 
@@ -344,9 +436,10 @@ Ask when the repo is new/empty, conventions conflict, a whole-project refactor i
 2. Which state approach for domain stores (Zustand, RTK, MobX, atomic, none)?
 3. Which data-fetching approach (React Query, RTK Query, SWR, none)?
 4. TypeScript or JavaScript?
-5. i18n now? If yes, which library and which locales?
-6. Which test runner, and centralized vs colocated tests?
-7. Confirm the domain convention: `modules/<domain>/<domain>.{service,hook,store,types}.*`?
+5. Which styling system (Chakra, Panda, Tailwind, styled-components, CSS modules, none)?
+6. i18n now? If yes, which library and which locales?
+7. Which test runner, and centralized vs colocated tests?
+8. Confirm the domain convention: `modules/<domain>/<domain>.{service,hook,store,types}.*`?
 
 ### Whole-project refactor
 
